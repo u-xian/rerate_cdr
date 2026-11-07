@@ -1,6 +1,6 @@
 {
   "planName": "Standard International & Local Voice Tariff",
-  "currency": "USD",
+  "currency": "cents",
   "effectiveDate": "2026-01-01",
   "billingUnit": "per_second",
   "tariffs": [

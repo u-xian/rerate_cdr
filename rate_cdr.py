@@ -1,4 +1,6 @@
-"""Apply the voice tariff (Call_Tariff.json) to every CDR and add a `charged_amount` column.
+"""Apply the voice tariff (Call_Tariff.json) to every CDR and add two columns:
+  charged_amount    = amount computed from the tariff (rules below)
+  charge_difference = charged_amount - total_currency_charge
 
 Rating rules:
   * destination   = longest country-code prefix of `called` found in the tariff.
@@ -7,8 +9,9 @@ Rating rules:
   * rate          = Off-PeakHours.ratePerSecond if off-peak hours are enabled and the call
                     STARTS in [off-peak start, off-peak end), otherwise ratePerSecond.
   * amount        = rate * duration_seconds, rounded half-up to 0.01.
-CDRs that cannot be rated (unknown destination, call before effectiveDate, bad data) get an
-empty `charged_amount` and are reported on stderr. All other columns are written back unchanged.
+CDRs that cannot be rated (unknown destination, call before effectiveDate, bad data) get both
+columns empty; a non-numeric total_currency_charge leaves only charge_difference empty. Such CDRs
+are reported on stderr. All other columns are written back unchanged.
 """
 import argparse, json, sys
 from collections import Counter
@@ -22,6 +25,8 @@ HERE = Path(__file__).resolve().parent
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
 CENT = Decimal("0.01")
 AMOUNT_COL = "charged_amount"
+DIFF_COL = "charge_difference"
+CHARGED_COL = "total_currency_charge"
 OFF_PEAK = "Off-PeakHours"
 
 
@@ -81,7 +86,7 @@ def rate_one(called, start_time, duration, by_code, effective):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Rate CDRs with the JSON tariff and add a charged_amount column.")
+    ap = argparse.ArgumentParser(description="Rate CDRs with the JSON tariff and add charged_amount and charge_difference columns.")
     ap.add_argument("-i", "--input", type=Path, default=HERE / "cdrs.csv", help="CDR CSV to rate (default: %(default)s)")
     ap.add_argument("-t", "--tariff", type=Path, default=HERE / "Call_Tariff.json", help="tariff JSON (default: %(default)s)")
     ap.add_argument("-o", "--output", type=Path, default=HERE / "cdrs_rated.csv", help="rated CSV (default: %(default)s)")
@@ -92,26 +97,38 @@ def main():
 
     # Read everything as text so untouched columns are written back exactly as they came in.
     df = pd.read_csv(args.input, dtype=str, keep_default_na=False)
-    missing = {"called", "start_time", "duration_seconds"} - set(df.columns)
+    missing = {"called", "start_time", "duration_seconds", CHARGED_COL} - set(df.columns)
     if missing:
         raise SystemExit(f"{args.input} is missing column(s): {', '.join(sorted(missing))}")
 
-    amounts, problems = [], []
-    for line, (called, st, dur) in enumerate(zip(df["called"], df["start_time"], df["duration_seconds"]), start=2):
+    amounts, diffs, problems = [], [], []
+    cols = zip(df["called"], df["start_time"], df["duration_seconds"], df[CHARGED_COL])
+    for line, (called, st, dur, charged) in enumerate(cols, start=2):
+        amount = diff = None
         try:
-            amounts.append(rate_one(called, st, dur, by_code, effective))
+            amount = rate_one(called, st, dur, by_code, effective)
+            charged = Decimal(charged.strip())
+            if not charged.is_finite():  # Decimal accepts "NaN" / "Infinity"; those are not amounts
+                raise ArithmeticError
+            diff = (amount - charged).quantize(CENT, rounding=ROUND_HALF_UP)
         except Unrated as e:
-            amounts.append(None)
-            problems.append((line, called, str(e)))
+            problems.append((line, called, f"not rated: {e}"))
+        except ArithmeticError:  # decimal.InvalidOperation: total_currency_charge is not a number
+            problems.append((line, called, f"{CHARGED_COL} is not a number ({DIFF_COL} left empty)"))
+        amounts.append(amount)
+        diffs.append(diff)
 
-    df[AMOUNT_COL] = amounts  # re-running on an already rated file replaces the column
+    df[AMOUNT_COL] = amounts  # re-running on an already rated file replaces these columns
+    df[DIFF_COL] = diffs
     df.to_csv(args.output, index=False)
 
-    rated = len(df) - len(problems)
+    cur = tariff.get("currency", "")
+    rated = sum(a is not None for a in amounts)
     total = sum((a for a in amounts if a is not None), Decimal(0))
-    print(f"rated {rated}/{len(df)} CDRs, total {total} {tariff.get('currency', '')} -> {args.output}")
+    total_diff = sum((d for d in diffs if d is not None), Decimal(0))
+    print(f"rated {rated}/{len(df)} CDRs, total {AMOUNT_COL} {total} {cur}, total {DIFF_COL} {total_diff} {cur} -> {args.output}")
     if problems:
-        print(f"WARNING: {len(problems)} CDR(s) not rated ({AMOUNT_COL} left empty):", file=sys.stderr)
+        print(f"WARNING: {len(problems)} CDR(s) with empty result column(s):", file=sys.stderr)
         for reason, n in Counter(p[2] for p in problems).most_common():
             print(f"  {n:>6}  {reason}", file=sys.stderr)
         for line, called, reason in problems[:10]:
