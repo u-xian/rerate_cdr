@@ -39,7 +39,14 @@ t0, window = time_window(cfg["start_time"])  # computed once, so every CDR share
 
 num = lambda p: f"{rnd.choice(p['country_code'])}{rnd.choice(p['province_code'])}{rnd.randint(p['telcom_code']['min'], p['telcom_code']['max'])}{rnd.randint(0, 9999):04d}"
 
-rng = lambda s: rnd.randint(s["min"], s["max"])
+def rng(s):
+    """Random value between s["min"] and s["max"] of the given config range.
+    Bounds written as whole numbers (10, 1800)     -> whole number, e.g. duration_seconds.
+    Bounds written as decimals      (10.0, 500.0)  -> decimal rounded to s["right_digits"] (default 2)."""
+    if isinstance(s["min"], int) and isinstance(s["max"], int):
+        return rnd.randint(s["min"], s["max"])
+    return round(rnd.uniform(s["min"], s["max"]), s.get("right_digits", 2))
+
 
 def cdr():
     c, b = cfg["called"], cfg["balance_change"]

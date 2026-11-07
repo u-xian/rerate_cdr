@@ -1,6 +1,9 @@
-"""Apply the voice tariff (Call_Tariff.json) to every CDR and add two columns:
+"""Apply the voice tariff (Call_Tariff.json) to every CDR and add three columns:
   charged_amount    = amount computed from the tariff (rules below)
   charge_difference = charged_amount - total_currency_charge
+  charge_category   = Overcharge  if charge_difference < 0 (billed more than the tariff)
+                      Undercharge if charge_difference > 0 (billed less than the tariff)
+                      Correct     if charge_difference = 0
 
 Rating rules:
   * destination   = longest country-code prefix of `called` found in the tariff.
@@ -9,9 +12,9 @@ Rating rules:
   * rate          = Off-PeakHours.ratePerSecond if off-peak hours are enabled and the call
                     STARTS in [off-peak start, off-peak end), otherwise ratePerSecond.
   * amount        = rate * duration_seconds, rounded half-up to 0.01.
-CDRs that cannot be rated (unknown destination, call before effectiveDate, bad data) get both
-columns empty; a non-numeric total_currency_charge leaves only charge_difference empty. Such CDRs
-are reported on stderr. All other columns are written back unchanged.
+CDRs that cannot be rated (unknown destination, call before effectiveDate, bad data) get all three
+columns empty; a non-numeric total_currency_charge leaves charge_difference and charge_category
+empty. Such CDRs are reported on stderr. All other columns are written back unchanged.
 """
 import argparse, json, sys
 from collections import Counter
@@ -26,6 +29,7 @@ TIME_FMT = "%Y-%m-%d %H:%M:%S"
 CENT = Decimal("0.01")
 AMOUNT_COL = "charged_amount"
 DIFF_COL = "charge_difference"
+CATEGORY_COL = "charge_category"
 CHARGED_COL = "total_currency_charge"
 OFF_PEAK = "Off-PeakHours"
 
@@ -85,8 +89,14 @@ def rate_one(called, start_time, duration, by_code, effective):
     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
+def categorize(diff):
+    if diff is None:
+        return None
+    return "Overcharge" if diff < 0 else "Undercharge" if diff > 0 else "Correct"
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Rate CDRs with the JSON tariff and add charged_amount and charge_difference columns.")
+    ap = argparse.ArgumentParser(description="Rate CDRs with the JSON tariff and add charged_amount, charge_difference and charge_category columns.")
     ap.add_argument("-i", "--input", type=Path, default=HERE / "cdrs.csv", help="CDR CSV to rate (default: %(default)s)")
     ap.add_argument("-t", "--tariff", type=Path, default=HERE / "Call_Tariff.json", help="tariff JSON (default: %(default)s)")
     ap.add_argument("-o", "--output", type=Path, default=HERE / "cdrs_rated.csv", help="rated CSV (default: %(default)s)")
@@ -111,15 +121,18 @@ def main():
             if not charged.is_finite():  # Decimal accepts "NaN" / "Infinity"; those are not amounts
                 raise ArithmeticError
             diff = (amount - charged).quantize(CENT, rounding=ROUND_HALF_UP)
+            if diff == 0:
+                diff = abs(diff)  # a tiny negative difference rounds to -0.00; write it as 0.00
         except Unrated as e:
             problems.append((line, called, f"not rated: {e}"))
         except ArithmeticError:  # decimal.InvalidOperation: total_currency_charge is not a number
-            problems.append((line, called, f"{CHARGED_COL} is not a number ({DIFF_COL} left empty)"))
+            problems.append((line, called, f"{CHARGED_COL} is not a number ({DIFF_COL} and {CATEGORY_COL} left empty)"))
         amounts.append(amount)
         diffs.append(diff)
 
     df[AMOUNT_COL] = amounts  # re-running on an already rated file replaces these columns
     df[DIFF_COL] = diffs
+    df[CATEGORY_COL] = [categorize(d) for d in diffs]
     df.to_csv(args.output, index=False)
 
     cur = tariff.get("currency", "")
@@ -127,6 +140,8 @@ def main():
     total = sum((a for a in amounts if a is not None), Decimal(0))
     total_diff = sum((d for d in diffs if d is not None), Decimal(0))
     print(f"rated {rated}/{len(df)} CDRs, total {AMOUNT_COL} {total} {cur}, total {DIFF_COL} {total_diff} {cur} -> {args.output}")
+    counts = Counter(df[CATEGORY_COL].dropna())
+    print("  " + ", ".join(f"{c}: {counts[c]}" for c in ("Overcharge", "Undercharge", "Correct")))
     if problems:
         print(f"WARNING: {len(problems)} CDR(s) with empty result column(s):", file=sys.stderr)
         for reason, n in Counter(p[2] for p in problems).most_common():
