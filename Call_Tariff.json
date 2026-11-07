@@ -1,0 +1,98 @@
+{
+  "planName": "Standard International & Local Voice Tariff",
+  "currency": "USD",
+  "effectiveDate": "2026-01-01",
+  "billingUnit": "per_minute",
+  "tariffs": [
+    {
+      "destinationGroup": "Local Mobile & Landline",
+      "countryName": "Canada",
+      "countryCode": 1,
+      "province_code": [418, 514, 819, 581],
+      "ratePerMinute": 1.5,
+      "peakHours": {
+        "enabled": true,
+        "start": "09:00",
+        "end": "17:00",
+        "ratePerMinute": 0.05
+      }
+    },
+    {
+      "destinationGroup": "Africa",
+      "countryCode": 244,
+      "countryName": "Angola",
+      "ratePerMinute": 0.08,
+      "connectionFee": 0.02
+    },
+    {
+      "destinationGroup": "Africa",
+      "countryCode": 20,
+      "countryName": "Egypt",
+      "ratePerMinute": 0.08,
+      "connectionFee": 0.02
+    },
+    {
+      "destinationGroup": "Africa",
+      "countryCode": 229,
+      "countryName": "Benin",
+      "ratePerMinute": 0.08,
+      "connectionFee": 0.02
+    },
+    {
+      "destinationGroup": "Africa",
+      "countryCode": 267,
+      "countryName": "Botswana",
+      "ratePerMinute": 0.08,
+      "connectionFee": 0.02
+    },
+    {
+      "destinationGroup": "Europe",
+      "countryCode": 43,
+      "countryName": "Austria",
+      "ratePerMinute": 0.15,
+      "connectionFee": 0.05
+    },
+    {
+      "destinationGroup": "Europe",
+      "countryCode": 44,
+      "countryName": "United Kingdom",
+      "ratePerMinute": 0.15,
+      "connectionFee": 0.05
+    },
+    {
+      "destinationGroup": "Europe",
+      "countryCode": 33,
+      "countryName": "France",
+      "ratePerMinute": 0.15,
+      "connectionFee": 0.05
+    },
+    {
+      "destinationGroup": "Europe",
+      "countryCode": 32,
+      "countryName": "Belgium",
+      "ratePerMinute": 0.15,
+      "connectionFee": 0.05
+    },
+    {
+      "destinationGroup": "Asia",
+      "countryCode": 880,
+      "countryName": "Bangladesh",
+      "ratePerMinute": 0.25,
+      "connectionFee": 0.1
+    },
+    {
+      "destinationGroup": "Asia",
+      "countryCode": 855,
+      "countryName": "Cambodia",
+      "ratePerMinute": 0.25,
+      "connectionFee": 0.1
+    },
+    {
+      "destinationGroup": "Asia",
+      "countryCode": 852,
+      "countryName": "Hong Kong",
+      "ratePerMinute": 0.25,
+      "connectionFee": 0.1
+    }
+  ]
+}
