@@ -24,7 +24,7 @@
     "positive": true
   },
   "cdr_type": 1,
-  "total_currency_charge": { "min": 10, "max": 5000 },
+  "total_currency_charge": { "min": 10, "max": 500 },
   "cos_id": [30, 62, 241, 242],
   "activity_direction": ["out"],
   "discount_id": [1240, 1241],

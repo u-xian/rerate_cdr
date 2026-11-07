@@ -2,7 +2,7 @@
   "planName": "Standard International & Local Voice Tariff",
   "currency": "USD",
   "effectiveDate": "2026-01-01",
-  "billingUnit": "per_minute",
+  "billingUnit": "per_second",
   "tariffs": [
     {
       "destinationGroup": "Local Mobile & Landline",

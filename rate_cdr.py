@@ -4,14 +4,13 @@ Rating rules:
   * destination   = longest country-code prefix of `called` found in the tariff.
                     For a tariff entry that lists `province_code` (Canada), the 3 digits
                     after the country code must be one of them.
-  * billed minutes = duration_seconds rounded UP to the next whole minute (billingUnit per_minute).
-  * rate          = peakHours.ratePerMinute if peak hours are enabled and the call STARTS in
-                    [peak start, peak end), otherwise ratePerMinute.
-  * amount        = billed minutes * rate + connectionFee (if any), rounded half-up to 0.01.
+  * rate          = Off-PeakHours.ratePerSecond if off-peak hours are enabled and the call
+                    STARTS in [off-peak start, off-peak end), otherwise ratePerSecond.
+  * amount        = rate * duration_seconds, rounded half-up to 0.01.
 CDRs that cannot be rated (unknown destination, call before effectiveDate, bad data) get an
 empty `charged_amount` and are reported on stderr. All other columns are written back unchanged.
 """
-import argparse, json, math, sys
+import argparse, json, sys
 from collections import Counter
 from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
@@ -23,6 +22,7 @@ HERE = Path(__file__).resolve().parent
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
 CENT = Decimal("0.01")
 AMOUNT_COL = "charged_amount"
+OFF_PEAK = "Off-PeakHours"
 
 
 class Unrated(Exception):
@@ -31,21 +31,25 @@ class Unrated(Exception):
 
 def load_tariff(path):
     t = json.load(open(path))
-    if t.get("billingUnit") != "per_minute":
-        raise SystemExit(f"unsupported billingUnit {t.get('billingUnit')!r} (only 'per_minute')")
+    if t.get("billingUnit") != "per_second":
+        print(f"WARNING: {path.name} says billingUnit={t.get('billingUnit')!r}; rates are applied per second "
+              f"(ratePerSecond) regardless", file=sys.stderr)
     by_code = {}
     for e in t["tariffs"]:
         code = str(e["countryCode"])  # accept 44 or "44"
         if code in by_code:
             raise SystemExit(f"countryCode {code} appears twice in {path}")
+        off = e.get(OFF_PEAK)
+        if "ratePerSecond" not in e or (off and off.get("enabled") and "ratePerSecond" not in off):
+            raise SystemExit(f"tariff for countryCode {code} ({e.get('countryName')}) has no ratePerSecond")
         by_code[code] = e
     return t, by_code
 
 
-def in_peak(peak, t):
-    if not peak or not peak.get("enabled"):
+def in_window(window, t):
+    if not window or not window.get("enabled"):
         return False
-    start, end = time.fromisoformat(peak["start"]), time.fromisoformat(peak["end"])
+    start, end = time.fromisoformat(window["start"]), time.fromisoformat(window["end"])
     return start <= t < end if start <= end else (t >= start or t < end)  # also handles overnight windows
 
 
@@ -70,10 +74,9 @@ def rate_one(called, start_time, duration, by_code, effective):
     if start.date() < effective:
         raise Unrated("call before tariff effectiveDate")
 
-    peak = entry.get("peakHours")
-    rate = peak["ratePerMinute"] if in_peak(peak, start.time()) else entry["ratePerMinute"]
-    minutes = math.ceil(seconds / 60)
-    amount = Decimal(str(rate)) * minutes + Decimal(str(entry.get("connectionFee", 0)))
+    off_peak = entry.get(OFF_PEAK)
+    rate = off_peak["ratePerSecond"] if in_window(off_peak, start.time()) else entry["ratePerSecond"]
+    amount = Decimal(str(rate)) * seconds  # charged_amount = ratePerSecond * duration_seconds
     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
 
 

@@ -51,5 +51,11 @@ def cdr():
             **{k: rnd.choice(cfg[k]) for k in ["cos_id", "activity_direction", "discount_id", "cell_id", "cdr_call_type"]}}
 rows = [cdr() for _ in range(N)]
 df = pd.DataFrame(rows)
+
+# Start clean: remove results of the previous run (cdrs.csv, cdrs_rated.csv, ...) in the output folder.
+for old in sorted(args.output.resolve().parent.glob("cdrs*.csv")):
+    old.unlink()
+    print(f"removed {old}")
+
 df.to_csv(args.output, index=False)
 print(f"wrote {len(df)} CDRs to {args.output}")
