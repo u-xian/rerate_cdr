@@ -25,14 +25,9 @@
   },
   "cdr_type": 1,
   "total_currency_charge": { "min": 10, "max": 5000 },
-  "total_non_currency_charge": { "min": 10, "max": 5000 },
   "cos_id": [30, 62, 241, 242],
-  "application_subtype": [307, 309],
   "activity_direction": ["out"],
   "discount_id": [1240, 1241],
   "cell_id": [220131111, 220131112, 220131113],
-  "cdr_call_type": ["nc"],
-  "_ocn_description": "Operating Company Number to identify the operator , ocn_caller to Bell",
-  "ocn_caller_id": [6574, 8050, 8051],
-  "ocn_called_id": [0]
+  "cdr_call_type": ["nc"]
 }
