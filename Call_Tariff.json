@@ -79,7 +79,7 @@
     },
     {
       "destinationGroup": "Asia",
-      "countryCode": "852",
+      "countryCode": 852,
       "countryName": "Hong Kong",
       "ratePerSecond": 0.25
     }
